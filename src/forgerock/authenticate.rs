@@ -1,5 +1,6 @@
+use std::io;
+
 use crate::forgerock::constants;
-use rand::distributions::{Alphanumeric, DistString};
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -22,9 +23,11 @@ struct AuthenticationCallback {
     #[serde(rename = "type")]
     pub callback_type: String,
     /// Server-side provided information over this callback.
-    pub output: Vec<ValuePair>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<Vec<ValuePair>>,
     /// Information the client must provide when responding.
-    pub input: Vec<ValuePair>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<Vec<ValuePair>>,
     /// Hidden identifier that shows up with multiple callbacks.
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<u32>,
@@ -102,21 +105,27 @@ pub async fn authenticate(credentials: AuthCredentials) -> Result<(), reqwest::E
 }
 
 impl AuthenticationCallback {
-    /// Process and handle all necessary inputs/outputs for this callback..
+    /// Process and handle all necessary inputs/outputs for this callback.
     pub fn process(&mut self, credentials: &AuthCredentials) {
-        // Frustratingly, not every output has a corresponding input.
-        // We'll iterate through pairs and handle as necessary.
         let callback_type = self.callback_type.as_str();
-        let mut output_iter = self.output.iter_mut();
-        let mut input_iter = self.input.iter_mut();
-
         println!("Callback type: {}", self.callback_type);
 
+        // Not every callback type has inputs.
+        if callback_type == "TextOutputCallback" {
+            return;
+        }
+
+        // Frustratingly, not every output has a corresponding input.
+        // We'll iterate through pairs and handle as necessary.
+        //
+        // TODO(spotlightishere): Properly determine instead of forcibly unwrapping
+        let mut output_iter = self.output.as_mut().unwrap().iter_mut();
+        let mut input_iter = self.input.as_mut().unwrap().iter_mut();
+
         // TODO(spotlightishere): This design is a mess with all the different types :(
+        // Can this design be refactored?
         match (callback_type, output_iter.next(), input_iter.next()) {
             ("NameCallback", Some(output), Some(input)) => {
-                println!("hiii");
-
                 // The name callback can, frustratingly, be used in several ways.
                 // We can verify based on the "prompt" within the first output.
                 let prompt_name = &output.value;
@@ -136,18 +145,52 @@ impl AuthenticationCallback {
                 let prompt_name = &output.value;
                 if prompt_name == "Password" {
                     input.value = json!(credentials.password);
+                } else if prompt_name == "One Time Password" {
+                    // TODO(spotlightishere): We probably shouldn't be just randomly requesting input here...
+                    let mut otp_code = String::new();
+                    print!("Please enter the OTP code you were just emailed/texted: ");
+                    io::stdin()
+                        .read_line(&mut otp_code)
+                        .expect("should be able to read OTP code");
+                    // Remove newline
+                    otp_code.truncate(otp_code.len() - 1);
+                    input.value = json!(otp_code);
                 } else {
                     unimplemented!("unknown password callback prompt name: {}", prompt_name)
                 }
             }
             ("HiddenValueCallback", _, Some(input)) => {
-                // TODO: There's likely more than one possible value than `devicePrint`,
+                // TODO: There's likely more than one possible value than `devicePrint` for HiddenValueCallback,
                 // but this appears to be the only one handled by the SDK as of writing.
-                let random_fingerprint = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
-                input.value = json!(random_fingerprint);
+                // let random_fingerprint = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
+                input.value = json!(
+                    "{
+                    \"appId\": \"com.toyota.oneapp\",
+                    \"biometricEnabled\": \"false\",
+                    \"deviceType\": \"Android\",
+                    \"emulator\": \"real\",
+                    \"geolocation\": null,
+                    \"hardwareId\": \"374B4DD5-F1BD-46A5-B5F6-1AE03EB24DD9\",
+                    \"language\": \"en\",
+                    \"model\": \"Pixel\",
+                    \"brand\": \"Google android-build\",
+                    \"pushTokenId\": null,
+                    \"systemOS\": \"21\",
+                    \"timeZone\": \"America/New_York\"
+                  }"
+                );
             }
             ("ChoiceCallback", _, _) => {
-                // We generally don't need to modify the defaults here.
+                // We generally can leave the default value here.
+                // Observed choices have been related to password resets,
+                // resending verification codes, choosing social media auth, etc.
+                //
+                // TODO: Change if necessary
+            }
+            ("ConfirmationCallback", _, _) => {
+                // This callback type has verify/resend options.
+                // The default is verify, so we do nothing.
+                //
                 // TODO: Change if necessary
             }
             (_, _, _) => {
@@ -196,7 +239,7 @@ async fn authenticate_request<T: Serialize>(
     // will have a non-200 response code.
     if !result.status().is_success() {
         // TODO(spotlightishere): Handle this better!
-        println!("Hmm... something has gone awry: {:?}", result);
+        println!("Hmm... something has gone awry: {:?}", result.text().await);
         panic!("Hell has frozen over");
     }
 
