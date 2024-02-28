@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, io::Write};
 
 use crate::forgerock::constants;
 use reqwest::Method;
@@ -141,7 +141,7 @@ impl AuthenticationCallback {
                 }
             }
             ("PasswordCallback", Some(output), Some(input)) => {
-                // Let's ensure that this is actually our password field.
+                // Password callbacks handle both passwords and OTP values.
                 let prompt_name = &output.value;
                 if prompt_name == "Password" {
                     input.value = json!(credentials.password);
@@ -149,6 +149,8 @@ impl AuthenticationCallback {
                     // TODO(spotlightishere): We probably shouldn't be just randomly requesting input here...
                     let mut otp_code = String::new();
                     print!("Please enter the OTP code you were just emailed/texted: ");
+                    io::stdout().flush().unwrap();
+
                     io::stdin()
                         .read_line(&mut otp_code)
                         .expect("should be able to read OTP code");
@@ -162,7 +164,6 @@ impl AuthenticationCallback {
             ("HiddenValueCallback", _, Some(input)) => {
                 // TODO: There's likely more than one possible value than `devicePrint` for HiddenValueCallback,
                 // but this appears to be the only one handled by the SDK as of writing.
-                // let random_fingerprint = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
                 input.value = json!(
                     "{
                     \"appId\": \"com.toyota.oneapp\",
@@ -181,7 +182,6 @@ impl AuthenticationCallback {
                 );
             }
             ("ChoiceCallback", _, _) => {
-                // We generally can leave the default value here.
                 // Observed choices have been related to password resets,
                 // resending verification codes, choosing social media auth, etc.
                 //
@@ -189,14 +189,13 @@ impl AuthenticationCallback {
             }
             ("ConfirmationCallback", _, _) => {
                 // This callback type has verify/resend options.
-                // The default is verify, so we do nothing.
+                // The default is to verify, so we do nothing.
                 //
                 // TODO: Change if necessary
             }
             (_, _, _) => {
-                println!("New type discovered: {}", callback_type);
                 println!("{:?}", self);
-                unimplemented!();
+                unimplemented!("unknown callback type: {}", callback_type);
             }
         }
     }
