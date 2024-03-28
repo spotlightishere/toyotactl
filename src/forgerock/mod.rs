@@ -1,4 +1,5 @@
 mod authenticate;
-mod constants;
+mod http_client;
 
-pub use authenticate::*;
+pub use authenticate::authenticate;
+pub use authenticate::AuthCredentials;
