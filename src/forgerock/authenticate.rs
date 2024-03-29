@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
+use http_client::HttpError;
+
 /// The high-level response format from authentication.
 /// Please refer to the ``authenticate`` function for its format.
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -92,14 +94,13 @@ pub struct AuthCredentials {
 /// The client would be expected to send back the *exact same* JSON object, but
 /// with the first input's `value` set to their device locale (e.g. `en-US`).
 /// There are several types of callback types, and we only handle a few.
-pub async fn authenticate(credentials: AuthCredentials) -> Result<String, reqwest::Error> {
+pub async fn authenticate(credentials: AuthCredentials) -> Result<String, HttpError> {
     // We must now loop through all possible callbacks until we get
     // a final token that we can handle, or until we receive an error.
-    let client = reqwest::Client::new();
-
+    //
     // First, make a request with an empty body to obtain our initial callback.
     // We assume that this should always be our authentication format.
-    let mut response = http_client::authenticate_request(&client, "").await;
+    let mut response = http_client::authenticate_request("").await?;
 
     // Let's loop for no more than 15 times to allow repeating if
     // the user makes a mistake with their username, password, or OTP code.
@@ -127,7 +128,7 @@ pub async fn authenticate(credentials: AuthCredentials) -> Result<String, reqwes
 
         // println!("{:?}", working_body);
         // We now make the request once more but with our adapted body.
-        response = http_client::authenticate_request(&client, working_body).await;
+        response = http_client::authenticate_request(working_body).await?;
         callback_count += 1;
     }
 
