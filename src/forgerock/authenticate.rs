@@ -1,11 +1,10 @@
-use std::{io, io::Write};
-
-use crate::forgerock::http_client;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::{io, io::Write};
 use uuid::Uuid;
 
-use http_client::HttpError;
+use super::forgerock::ForgeRockError;
 
 /// The high-level response format from authentication.
 /// Please refer to the ``authenticate`` function for its format.
@@ -61,6 +60,56 @@ pub struct AuthCredentials {
     pub password: String,
 }
 
+/// The path to the authenticate endpoint using ForgeRock AM.
+const AUTHENTICATE_ENDPOINT: &str =
+    "https://login.toyotadriverslogin.com/json/realms/root/realms/tmna-native/authenticate";
+
+/// Creates and executes the actual authentication request with the given client.
+pub async fn perform_authenticate_request<T: Serialize>(
+    json: T,
+) -> Result<AuthenticateFormat, ForgeRockError> {
+    // We'll need to serialize our text to begin with.
+    let posted_contents =
+        serde_json::to_string(&json).expect("should have valid JSON to POST with");
+    println!("About to post: {}", posted_contents);
+
+    // There are several necessary components to our authenticate request:
+    let result = Client::new()
+        .post(AUTHENTICATE_ENDPOINT)
+        // We must specify we're POSTing JSON, and an acceptable API version.
+        .header("Content-Type", "application/json")
+        .header("Accept-API-Version", "resource=2.1, protocol=1.0")
+        // ForgeRock documents that you must specify an auth index "type".
+        // We use the "service" type with "OneAppSignIn" so that we can log in.
+        // (For registeration, there is also "OneAppSignUp".)
+        .query(&[
+            ("authIndexType", "service"),
+            ("authIndexValue", "OneAppSignIn"),
+        ])
+        .body(posted_contents)
+        .send()
+        .await
+        .map_err(ForgeRockError::Reqwest)?;
+
+    // Let's ensure that we made this request successfully.
+    // We (naively) assume that any request resulting in an error
+    // will have a non-200 response code.
+    if !result.status().is_success() {
+        // TODO(spotlightishere): Handle this better!
+        println!("Hmm... something has gone awry: {:?}", result.text().await);
+        panic!("Hell has frozen over");
+    }
+
+    // Finally, we can serialize to our expected format.
+    let response_text = result.text().await.map_err(ForgeRockError::Reqwest)?;
+    println!("body: {}", response_text);
+
+    match serde_json::from_str(response_text.as_str()) {
+        Ok(body) => Ok(body),
+        Err(error) => Err(ForgeRockError::Parse(error)),
+    }
+}
+
 /// Begin the authentication tango.
 ///
 /// ForgeRock's AM product has... a design, for certain.
@@ -94,13 +143,13 @@ pub struct AuthCredentials {
 /// The client would be expected to send back the *exact same* JSON object, but
 /// with the first input's `value` set to their device locale (e.g. `en-US`).
 /// There are several types of callback types, and we only handle a few.
-pub async fn authenticate(credentials: AuthCredentials) -> Result<String, HttpError> {
+pub async fn authenticate(credentials: AuthCredentials) -> Result<String, ForgeRockError> {
     // We must now loop through all possible callbacks until we get
     // a final token that we can handle, or until we receive an error.
     //
     // First, make a request with an empty body to obtain our initial callback.
     // We assume that this should always be our authentication format.
-    let mut response = http_client::authenticate_request("").await?;
+    let mut response = perform_authenticate_request("").await?;
 
     // Let's loop for no more than 15 times to allow repeating if
     // the user makes a mistake with their username, password, or OTP code.
@@ -128,13 +177,12 @@ pub async fn authenticate(credentials: AuthCredentials) -> Result<String, HttpEr
 
         // println!("{:?}", working_body);
         // We now make the request once more but with our adapted body.
-        response = http_client::authenticate_request(working_body).await?;
+        response = perform_authenticate_request(working_body).await?;
         callback_count += 1;
     }
 
-    // TODO(spotlightishere) Actually implement errors
     // If we've failed to obtain a token within 15 attempts, cease.
-    panic!("Failed to complete tango!")
+    Err(ForgeRockError::AuthError)
 }
 
 impl AuthenticationCallback {

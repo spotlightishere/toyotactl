@@ -1,4 +1,4 @@
-use super::http_client::{HttpError, OAUTH_CLIENT_ID, OAUTH_REDIRECT_URI};
+use super::forgerock::{ForgeRockError, OAUTH_CLIENT_ID, OAUTH_REDIRECT_URI};
 use reqwest::{header, StatusCode};
 use std::collections::HashMap;
 use url::Url;
@@ -9,7 +9,7 @@ const AUTHORIZATION_ENDPOINT: &str =
     "https://login.toyotadriverslogin.com/oauth2/realms/root/realms/tmna-native/authorize";
 
 /// Performs OAuth2 authorization, obtaining a code we can exchange for an access token.
-pub async fn perform_authorize_request(token_id: String) -> Result<String, HttpError> {
+pub async fn perform_authorize_request(token_id: String) -> Result<String, ForgeRockError> {
     let result = reqwest::Client::new()
         .get(AUTHORIZATION_ENDPOINT)
         // We only have to deviate once here: we must set our obtained token as a cookie.
@@ -25,7 +25,7 @@ pub async fn perform_authorize_request(token_id: String) -> Result<String, HttpE
         ])
         .send()
         .await
-        .map_err(HttpError::Reqwest)?;
+        .map_err(ForgeRockError::Reqwest)?;
 
     // We should be given 302 Found, and redirected to the OAuth2 URL.
     if result.status() != StatusCode::FOUND {
@@ -45,6 +45,6 @@ pub async fn perform_authorize_request(token_id: String) -> Result<String, HttpE
     let query_parameters: HashMap<String, String> = location.query_pairs().into_owned().collect();
     match query_parameters.get("code") {
         Some(oauth2_code) => Ok(oauth2_code.to_string()),
-        None => Err(HttpError::OAuth2),
+        None => Err(ForgeRockError::OAuth2),
     }
 }
