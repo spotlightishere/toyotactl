@@ -1,4 +1,4 @@
-use super::forgerock::{ForgeRockError, OAUTH_CLIENT_ID, OAUTH_REDIRECT_URI};
+use super::{ForgeRockError, OAUTH_CLIENT_ID, OAUTH_REDIRECT_URI};
 use reqwest::{header, StatusCode};
 use std::collections::HashMap;
 use url::Url;

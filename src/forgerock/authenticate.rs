@@ -4,7 +4,7 @@ use serde_json::json;
 use std::{io, io::Write};
 use uuid::Uuid;
 
-use super::forgerock::ForgeRockError;
+use super::ForgeRockError;
 
 /// The high-level response format from authentication.
 /// Please refer to the ``authenticate`` function for its format.

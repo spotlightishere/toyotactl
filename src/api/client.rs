@@ -16,7 +16,7 @@ impl ApiClient {
     pub fn new(access_token: String) -> Result<Self, ApiError> {
         // TODO(spotlightishere): Handle accordingly
         Ok(Self {
-            access_token: access_token,
+            access_token,
             guid: "".to_string(),
         })
     }

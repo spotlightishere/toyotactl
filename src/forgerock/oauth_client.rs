@@ -1,4 +1,4 @@
-use super::forgerock::{CredentialStorage, ForgeRockError, OAUTH_CLIENT_ID, OAUTH_REDIRECT_URI};
+use super::{storage::CredentialStorage, ForgeRockError, OAUTH_CLIENT_ID, OAUTH_REDIRECT_URI};
 
 /// The endpoint leveraged for obtaining an access token.
 const ACCESS_TOKEN_ENDPOINT: &str =
