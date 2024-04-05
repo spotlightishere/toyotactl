@@ -182,7 +182,7 @@ pub async fn authenticate(credentials: AuthCredentials) -> Result<String, ForgeR
     }
 
     // If we've failed to obtain a token within 15 attempts, cease.
-    Err(ForgeRockError::AuthError)
+    Err(ForgeRockError::Auth)
 }
 
 impl AuthenticationCallback {

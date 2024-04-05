@@ -7,17 +7,11 @@ pub struct ApiClient {
 }
 
 #[derive(Debug)]
-pub enum ApiError {
-    InvalidToken,
-}
+pub enum ApiError {}
 
 impl ApiClient {
-    /// Creates a new API client around the given access token.
-    pub fn new(access_token: String) -> Result<Self, ApiError> {
-        // TODO(spotlightishere): Handle accordingly
-        Ok(Self {
-            access_token,
-            guid: "".to_string(),
-        })
+    /// Creates a new API client around the given access token and GUID.
+    pub fn new(access_token: String, guid: String) -> Self {
+        Self { access_token, guid }
     }
 }

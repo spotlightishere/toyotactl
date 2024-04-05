@@ -39,3 +39,35 @@ pub async fn obtain_access_token(
         Err(error) => Err(ForgeRockError::Parse(error)),
     }
 }
+
+/// Attempt to refresh both access/refresh tokens via OAuth2.
+pub async fn refresh_tokens(refresh_token: String) -> Result<CredentialStorage, ForgeRockError> {
+    let result = reqwest::Client::new()
+        .post(ACCESS_TOKEN_ENDPOINT)
+        .query(&[
+            ("client_id", OAUTH_CLIENT_ID),
+            ("grant_type", "refresh_token"),
+            ("code_verifier", "plain"),
+            ("refresh_token", &refresh_token),
+        ])
+        .send()
+        .await
+        .map_err(ForgeRockError::Reqwest)?;
+
+    // We'll reuse CredentialStorage from the primary `forgerock` module
+    // because it also has `access_token` and `refresh_token` fields,
+    // which is all we need to care about from this response.
+    if !result.status().is_success() {
+        // TODO(spotlightishere): Handle this better!
+        println!("Hmm... something has gone awry: {:?}", result.text().await);
+        panic!("Hell has frozen over");
+    }
+
+    let response_text = result.text().await.map_err(ForgeRockError::Reqwest)?;
+    println!("refresh token response body: {}", response_text);
+
+    match serde_json::from_str(response_text.as_str()) {
+        Ok(body) => Ok(body),
+        Err(error) => Err(ForgeRockError::Parse(error)),
+    }
+}

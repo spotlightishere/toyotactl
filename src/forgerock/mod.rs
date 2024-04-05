@@ -1,16 +1,18 @@
 mod authenticate;
 mod authorize;
+mod jwt;
 mod oauth_client;
 mod storage;
 
 /// Possible error types while working with ForgeRock.
 #[derive(Debug)]
 pub enum ForgeRockError {
-    AuthError,
+    Auth,
     Reqwest(reqwest::Error),
     Parse(serde_json::Error),
     OAuth2,
-    ApiClientError(crate::api::ApiError),
+    InvalidToken,
+    ExpiredToken,
 }
 
 /// The shared redirect URI across all OAuth2 requests.
